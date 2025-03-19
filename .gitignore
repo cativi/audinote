@@ -1,0 +1,49 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs & temp files
+logs/
+*.log
+*.out
+*.err
+nohup.out
+
+# Large Files
+*.zip
+
+# FFmpeg temporary files
+*.wav
+*.mp3
+*.ogg
+*.aac
+*.flac
+*.m4a
+*.opus
+
+# Transcription output
+transcriptions/
+*.txt
+
+# Uploaded files
+uploads/
+
+# Vosk models (optional, to avoid pushing large files)
+models/vosk-model-*/
+
+# OS/System files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+
