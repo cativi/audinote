@@ -1,7 +1,11 @@
 import sys
 import wave
 import json
-from vosk import Model, KaldiRecognizer
+import os
+from vosk import Model, KaldiRecognizer, SetLogLevel
+
+# Suppress Vosk logs by setting log level to -1
+SetLogLevel(-1)
 
 # Get arguments
 AUDIO_FILE = sys.argv[1]
@@ -21,5 +25,8 @@ while True:
         result = json.loads(rec.Result())
         result_text += result.get("text", "") + " "
 
-print(result_text)
+# Get final bits of audio
+final_result = json.loads(rec.FinalResult())
+result_text += final_result.get("text", "")
 
+print(result_text.strip())
