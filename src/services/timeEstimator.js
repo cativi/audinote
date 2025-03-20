@@ -8,6 +8,7 @@ const { timeEstimation } = require('../config');
  * @param {string} durationStr - The duration string.
  * @returns {number} The duration in seconds.
  */
+
 const parseDurationToSeconds = (durationStr) => {
     if (!durationStr || typeof durationStr !== 'string') {
         console.error(`Invalid duration string: ${durationStr}`);
@@ -17,7 +18,14 @@ const parseDurationToSeconds = (durationStr) => {
     durationStr = durationStr.trim();
 
     if (durationStr.includes(":")) {
-        const parts = durationStr.split(":").map(part => {
+        // Handle edge cases with empty parts or double colons
+        // Replace multiple consecutive colons with a single one
+        const normalizedStr = durationStr.replace(/:+/g, ':');
+
+        // Handle strings starting with colon (e.g., ":30" becomes "0:30")
+        const timeStr = normalizedStr.startsWith(':') ? `0${normalizedStr}` : normalizedStr;
+
+        const parts = timeStr.split(":").map(part => {
             const num = parseFloat(part.trim());
             return isNaN(num) ? 0 : num;
         });
@@ -26,12 +34,14 @@ const parseDurationToSeconds = (durationStr) => {
             return parts[0] * 3600 + parts[1] * 60 + parts[2];
         } else if (parts.length === 2) {
             return parts[0] * 60 + parts[1];
+        } else if (parts.length === 1 && parts[0] > 0) {
+            return parts[0];
         }
     }
 
     const num = parseFloat(durationStr);
     return isNaN(num) ? 0 : num;
-};
+}
 
 /**
  * Formats seconds into a human-readable time object.
