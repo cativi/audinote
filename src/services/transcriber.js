@@ -3,6 +3,9 @@ const { spawn } = require("child_process");
 const fs = require("fs/promises");
 const path = require("path");
 
+// Import the modelPaths from Config
+const { modelPaths } = require("../config");
+
 // Ensure transcriptions directory exists (using synchronous check for directory creation)
 const TRANSCRIPTIONS_DIR = path.join(__dirname, "../../transcriptions");
 const fsSync = require("fs");
@@ -16,12 +19,9 @@ if (!fsSync.existsSync(TRANSCRIPTIONS_DIR)) {
  * @returns {string} - The corresponding model path.
  */
 const getModelPath = (lang) => {
-    const models = {
-        es: "models/vosk-model-es-0.42",
-        en: "models/vosk-model-en-us-0.22"
-    };
     console.log(`🗣 Using language model: ${lang}`);
-    return models[lang] || models.en; // Default to English if language is not found
+    // Use the modelPaths from config
+    return modelPaths[lang] || modelPaths.en;
 };
 
 /**

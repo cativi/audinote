@@ -28,5 +28,9 @@ module.exports = {
     timeEstimation: {
         fixedOverheadSeconds: 60,
         processingSpeedFactor: 30 // Audio is processed 30x faster than real-time
+    },
+    modelPaths: {
+        en: "models/vosk-model-en-us-0.22",
+        es: "models/vosk-model-es-0.42"
     }
 };
