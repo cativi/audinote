@@ -3,43 +3,63 @@ const { spawn } = require("child_process");
 const fs = require("fs");
 const { AppError } = require("../utils/errorHandler");
 const { deleteFile } = require("../utils/fileUtils");
+const { ffmpegOptions, audioFormat, ffmpegPath, errorMessages } = require("../config");
 
+/**
+ * Processes an audio file by converting it to a WAV format using FFmpeg.
+ * @param {string} filePath - The path to the input audio file.
+ * @returns {Promise<string>} - Resolves with the path to the converted WAV file.
+ */
 const processAudio = (filePath) => {
     return new Promise((resolve, reject) => {
+        // Ensure the file exists before proceeding
         if (!fs.existsSync(filePath)) {
-            return reject(new AppError("Input file does not exist", 500, filePath));
+            return reject(new AppError(errorMessages.fileNotFound, 500, filePath));
         }
 
-        const wavFile = `${filePath}.wav`;
+        // Define the output WAV file path based on the configured audio format
+        const wavFile = `${filePath}.${audioFormat}`;
         console.log("🔄 Converting MP3 to WAV...");
 
-        const ffmpeg = spawn("ffmpeg", ["-i", filePath, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wavFile]);
+        // Spawn an FFmpeg process to convert the input audio file to WAV
+        const ffmpeg = spawn(ffmpegPath, [
+            "-i", filePath,                  // Input file
+            "-ar", ffmpegOptions.sampleRate, // Set audio sample rate
+            "-ac", ffmpegOptions.channels,   // Set number of audio channels (mono/stereo)
+            "-c:a", ffmpegOptions.codec,     // Set audio codec
+            wavFile                          // Output file
+        ]);
 
         let ffmpegError = '';
 
-        ffmpeg.stderr.on('data', (data) => {
+        // Capture any error messages from FFmpeg's standard error output
+        ffmpeg.stderr.on("data", (data) => {
             ffmpegError += data.toString();
         });
 
+        // Handle process errors (e.g., if FFmpeg is missing or fails to execute)
         ffmpeg.on("error", (err) => {
             deleteFile(filePath);
-            reject(new AppError("FFmpeg process error: " + err.message, 500, filePath));
+            reject(new AppError(`${errorMessages.ffmpegFailed}: ${err.message}`, 500, filePath));
         });
 
+        // Handle process completion
         ffmpeg.on("close", (code) => {
-            // Asynchronously delete the original file
+            // Delete the original file to save storage
             deleteFile(filePath);
 
+            // If FFmpeg failed, return an error
             if (code !== 0) {
                 return reject(new AppError(
-                    "FFmpeg conversion failed with code " + code + (ffmpegError ? ": " + ffmpegError : ""),
+                    `${errorMessages.ffmpegFailed} with code ${code} ${ffmpegError ? ": " + ffmpegError : ""}`,
                     500,
                     wavFile
                 ));
             }
 
+            // Ensure the WAV file was created successfully
             if (!fs.existsSync(wavFile)) {
-                return reject(new AppError("WAV file was not created during conversion", 500));
+                return reject(new AppError(errorMessages.wavNotCreated, 500));
             }
 
             console.log("✅ Conversion complete.");

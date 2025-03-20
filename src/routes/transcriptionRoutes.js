@@ -4,6 +4,8 @@ const { processAudio } = require("../services/audioProcessor");
 const { transcribeAudio } = require("../services/transcriber");
 const { AppError } = require("../utils/errorHandler");
 const { deleteFile } = require("../utils/fileUtils");
+const { allowedMimeTypes, allowedExtensions, allowedLanguages, defaultLanguage } = require("../config");
+const { getAudioDuration, formatTime, calculateEstimatedProcessingTime, calculateTimeDifference } = require("../services/timeEstimator");
 const router = express.Router();
 
 // Validation middleware for request
@@ -11,69 +13,68 @@ const validateRequest = (req, res, next) => {
     if (!req.file) {
         return next(new AppError("No audio file provided.", 400));
     }
-
-    // Debug: Log the actual mimetype received
-    console.log(`File received with mimetype: ${req.file.mimetype}`);
-
-    // Validate file type with broader mime type acceptance
-    // Some systems might report different mime types for the same file
-    const allowedMimeTypes = [
-        'audio/mpeg',
-        'audio/mp3',
-        'audio/wav',
-        'audio/x-wav',
-        'audio/x-mp3',
-        'audio/mp4',
-        'audio/x-m4a',
-        'audio/aac',
-        // Handle cases where mimetype might be missing or incorrectly identified
-        'application/octet-stream'
-    ];
-
-    // Check if the filename ends with an allowed extension as fallback
-    const hasAllowedExtension = /\.(mp3|wav|m4a|aac)$/i.test(req.file.originalname);
-
+    console.log(`📂 File received: ${req.file.originalname} (MIME: ${req.file.mimetype})`);
+    const hasAllowedExtension = new RegExp(`\\.(${allowedExtensions.join('|')})$`, "i").test(req.file.originalname);
     if (!allowedMimeTypes.includes(req.file.mimetype) && !hasAllowedExtension) {
-        // Clean up the invalid file
         deleteFile(req.file.path);
         return next(new AppError(
-            `Invalid file type: ${req.file.mimetype}. Only audio files (MP3, WAV) are allowed.`,
+            `Invalid file type: ${req.file.mimetype}. Only audio files (${allowedExtensions.join(', ').toUpperCase()}) are allowed.`,
             400
         ));
     }
-
-    // Validate language parameter (if needed)
-    const allowedLanguages = ['en', 'es'];
     if (req.body.language && !allowedLanguages.includes(req.body.language)) {
         deleteFile(req.file.path);
         return next(new AppError(`Invalid language. Supported languages: ${allowedLanguages.join(', ')}`, 400));
     }
-
     next();
 };
 
 router.post("/", validateRequest, async (req, res, next) => {
     let wavFile = null;
-
+    const startTime = Date.now(); // Start time tracking
     try {
-        console.log(`📥 Received file: ${req.file.originalname}`);
+        console.log(`📥 Processing file: ${req.file.originalname}`);
 
-        // Process the audio file
+        // Convert uploaded file to WAV
         wavFile = await processAudio(req.file.path);
 
+        // Get audio duration using FFmpeg
+        const durationSeconds = await getAudioDuration(wavFile);
+
+        // Format duration for display
+        const durationFormatted = formatTime(durationSeconds);
+        console.log(`🎵 MP3 duration: ${durationFormatted.minutes} minutes ${durationFormatted.seconds} seconds.`);
+
+        // Calculate estimated processing time
+        const estimatedTime = calculateEstimatedProcessingTime(durationSeconds);
+        console.log(`⏳ Estimated processing time: ${estimatedTime.hours}h ${estimatedTime.minutes}m ${estimatedTime.seconds}s`);
+
         // Transcribe the processed file
-        const language = req.body.language || "en";
+        const language = req.body.language || defaultLanguage;
         const transcription = await transcribeAudio(wavFile, language);
 
-        // Return success response
+        // Compute actual processing time
+        const endTime = Date.now();
+        const actualProcessingTimeSeconds = Math.round((endTime - startTime) / 1000);
+        const actualTime = formatTime(actualProcessingTimeSeconds);
+
+        // Calculate the difference between estimated and actual time
+        const difference = calculateTimeDifference(actualProcessingTimeSeconds, estimatedTime);
+
+        console.log(`🚀 Actual processing time: ${actualTime.hours}h ${actualTime.minutes}m ${actualTime.seconds}s`);
+        console.log(`📉 Difference: ${difference.differenceText}`);
+
         res.json({
             success: true,
             language,
+            audioDuration: durationFormatted,
+            estimatedProcessingTime: estimatedTime,
+            actualProcessingTime: actualTime,
+            timeDifference: difference.timeObject,
+            timeDifferenceText: difference.differenceText,
             ...transcription
         });
-
     } catch (error) {
-        // If processAudio succeeded but transcribeAudio failed, we need to clean up the wavFile
         if (wavFile) {
             error.cleanup = wavFile;
         }
