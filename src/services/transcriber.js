@@ -5,6 +5,7 @@ const path = require("path");
 
 // Import the modelPaths from Config
 const { modelPaths } = require("../config");
+const logger = require("../utils/logger");
 
 // Ensure transcriptions directory exists (using synchronous check for directory creation)
 const TRANSCRIPTIONS_DIR = path.join(__dirname, "../../transcriptions");
@@ -19,8 +20,7 @@ if (!fsSync.existsSync(TRANSCRIPTIONS_DIR)) {
  * @returns {string} - The corresponding model path.
  */
 const getModelPath = (lang) => {
-    console.log(`🗣 Using language model: ${lang}`);
-    // Use the modelPaths from config
+    logger.info(`🗣 Using language model: ${lang}`);
     return modelPaths[lang] || modelPaths.en;
 };
 
@@ -32,52 +32,44 @@ const getModelPath = (lang) => {
  */
 const transcribeAudio = (wavFile, language) => {
     return new Promise((resolve, reject) => {
-        console.log(`📝 Transcribing with model: ${language}`);
+        logger.info(`📝 Transcribing with model: ${language}`);
 
-        // Spawn a Python process to run the transcription script
         const pythonProcess = spawn(
             "./venv/bin/python3",
             ["transcribe.py", wavFile, getModelPath(language)],
-            { stdio: ["pipe", "pipe", "pipe"] } // Capture output from Python process
+            { stdio: ["pipe", "pipe", "pipe"] }
         );
 
         let transcription = "";
 
-        // Capture transcription output from stdout
         pythonProcess.stdout.on("data", (data) => {
             transcription += data.toString();
         });
 
-        // Capture and log errors from stderr (excluding non-critical Vosk logs)
         pythonProcess.stderr.on("data", (data) => {
             const errorMsg = data.toString();
-            if (!errorMsg.includes("LOG (VoskAPI:")) { // Ignore expected logs
-                console.error(`❌ Python error: ${errorMsg}`);
+            if (!errorMsg.includes("LOG (VoskAPI:")) {
+                logger.error(`❌ Python error: ${errorMsg}`);
             }
         });
 
-        // Handle process completion
         pythonProcess.on("close", async (code) => {
             try {
-                // Asynchronously delete the temporary WAV file after processing
                 try {
                     await fs.unlink(wavFile);
                 } catch (unlinkError) {
-                    console.error(`Failed to delete WAV file: ${unlinkError.message}`);
+                    logger.warn(`Failed to delete WAV file: ${unlinkError.message}`);
                 }
 
-                // Handle failed transcription process
                 if (code !== 0) {
                     return reject(new Error("❌ Transcription process failed."));
                 }
 
-                // Save the transcription result to a file
                 const transcriptFile = path.join(TRANSCRIPTIONS_DIR, `${path.basename(wavFile)}.txt`);
                 await fs.writeFile(transcriptFile, transcription.trim());
 
-                console.log(`📄 Transcription saved: ${transcriptFile}`);
+                logger.info(`📄 Transcription saved: ${transcriptFile}`);
 
-                // Return transcription results
                 resolve({ text: transcription.trim(), transcriptFile });
             } catch (err) {
                 reject(err);

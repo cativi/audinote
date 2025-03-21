@@ -8,6 +8,7 @@ const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
 const { getVideoDuration, formatTime, calculateEstimatedProcessingTime, calculateTimeDifference } = require("../services/timeEstimator");
+const logger = require("../utils/logger"); // ✅ Added logger
 
 const router = express.Router();
 
@@ -17,11 +18,11 @@ const downloadAudioWithYtDlp = (url, outputPath) => {
         const ytDlp = spawn("yt-dlp", ["-f", "bestaudio", "-o", outputPath, url]);
 
         ytDlp.stdout.on("data", (data) => {
-            console.log(`yt-dlp: ${data}`);
+            logger.debug(`yt-dlp: ${data}`);
         });
 
         ytDlp.stderr.on("data", (data) => {
-            console.error(`yt-dlp error: ${data}`);
+            logger.warn(`yt-dlp error: ${data}`);
         });
 
         ytDlp.on("close", (code) => {
@@ -44,41 +45,39 @@ router.post("/", async (req, res, next) => {
     const tempFilename = path.join("uploads", `${Date.now()}-youtube.mp3`);
 
     try {
-        console.log(`📥 Downloading YouTube audio from: ${url}`);
+        logger.info(`📥 Downloading YouTube audio from: ${url}`);
         const startTime = Date.now(); // Start time tracking
 
-        // Get the video duration using the centralized function
+        // Get the video duration
         const durationSeconds = await getVideoDuration(url);
-
-        // Create formatted time object with the utility function
         const durationFormatted = formatTime(durationSeconds);
-        console.log(`🎬 YT video lasts ${durationFormatted.minutes} minutes ${durationFormatted.seconds} seconds.`);
+        logger.info(`🎬 YT video lasts ${durationFormatted.minutes} minutes ${durationFormatted.seconds} seconds.`);
 
-        // Calculate estimated processing time
+        // Estimate processing time
         const estimatedTime = calculateEstimatedProcessingTime(durationSeconds);
-        console.log(`⏳ Estimated processing time: ${estimatedTime.hours}h ${estimatedTime.minutes}m ${estimatedTime.seconds}s`);
+        logger.info(`⏳ Estimated processing time: ${estimatedTime.hours}h ${estimatedTime.minutes}m ${estimatedTime.seconds}s`);
 
-        // Download the audio using yt-dlp
+        // Download the audio
         await downloadAudioWithYtDlp(url, tempFilename);
-        console.log("✅ YouTube audio download complete.");
+        logger.info("✅ YouTube audio download complete.");
 
-        // Process the downloaded file (convert to WAV)
+        // Convert to WAV
         const wavFile = await processAudio(tempFilename);
 
-        // Transcribe the audio
+        // Transcribe
         const transcriptionLanguage = language || require("../config").defaultLanguage;
         const transcription = await transcribeAudio(wavFile, transcriptionLanguage);
 
-        // Compute actual processing time
+        // Calculate actual processing time
         const endTime = Date.now();
         const actualProcessingTimeSeconds = Math.round((endTime - startTime) / 1000);
         const actualTime = formatTime(actualProcessingTimeSeconds);
 
-        // Calculate the difference between estimated and actual time
+        // Time difference
         const difference = calculateTimeDifference(actualProcessingTimeSeconds, estimatedTime);
 
-        console.log(`🚀 Actual processing time: ${actualTime.hours}h ${actualTime.minutes}m ${actualTime.seconds}s`);
-        console.log(`📉 Difference: ${difference.differenceText}`);
+        logger.info(`🚀 Actual processing time: ${actualTime.hours}h ${actualTime.minutes}m ${actualTime.seconds}s`);
+        logger.info(`📉 Difference: ${difference.differenceText}`);
 
         res.json({
             success: true,
@@ -98,4 +97,5 @@ router.post("/", async (req, res, next) => {
     }
 });
 
+router.downloadAudioWithYtDlp = downloadAudioWithYtDlp;
 module.exports = router;

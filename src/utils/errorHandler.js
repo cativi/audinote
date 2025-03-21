@@ -1,5 +1,6 @@
 // utils/errorHandler.js
 const { deleteFile } = require('./fileUtils');
+const logger = require('./logger');
 
 // Custom error class for application-specific errors
 class AppError extends Error {
@@ -14,34 +15,31 @@ class AppError extends Error {
 
 // Centralized error handler middleware
 const errorHandler = (err, req, res, next) => {
-    // Get status code from error if available, default to 500
     const statusCode = err.statusCode || 500;
 
-    // Log error details (consider different log levels based on status code)
-    console.error(`❌ Error [${statusCode}]:`, err.message);
+    // Log main error message
+    logger.error(`❌ Error [${statusCode}]: ${err.message}`);
+
+    // Log stack trace only in development
     if (process.env.NODE_ENV !== 'production') {
-        console.error(err.stack);
+        logger.debug(err.stack);
     }
 
-    // If there are files to clean up, do it
+    // Clean up any resources attached to the error
     if (err.cleanup) {
         try {
-            if (Array.isArray(err.cleanup)) {
-                err.cleanup.forEach(file => deleteFile(file));
-            } else {
-                deleteFile(err.cleanup);
-            }
+            const files = Array.isArray(err.cleanup) ? err.cleanup : [err.cleanup];
+            files.forEach(file => deleteFile(file));
         } catch (cleanupError) {
-            console.error('Failed to clean up files:', cleanupError);
+            logger.warn(`⚠️ Failed to clean up files: ${cleanupError.message}`);
         }
     }
 
-    // Clean up any uploaded file that might still be there in case of error
+    // Clean up uploaded file from req (fallback)
     if (req.file && req.file.path) {
         deleteFile(req.file.path);
     }
 
-    // Send appropriate response based on the error
     res.status(statusCode).json({
         success: false,
         message: err.message,
